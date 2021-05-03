@@ -1,0 +1,6 @@
+---
+- name: get microk8s join string
+  ansible.builtin.shell:
+    cmd: microk8s add-node
+  delegate_to: "{{ groups['microk8s'] | first }}"
+  register: microk8s_add_node

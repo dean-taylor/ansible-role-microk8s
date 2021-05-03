@@ -1,0 +1,8 @@
+- name: microk8s enable features
+  ansible.builtin.command:
+    cmd: microk8s enable {{ item }}
+  with_items:
+    - "{{ microk8s_features }}"
+  when:
+    - ansible_local.microk8s.addons is defined
+    - (ansible_local.microk8s.addons | selectattr('name','contains', item ) | first).status == "disabled"

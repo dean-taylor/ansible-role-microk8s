@@ -1,0 +1,12 @@
+---
+# defaults file for microk8s
+microk8s_snap_channel: 1.19/stable
+microk8s_group_members: []
+#  - "{{ ansible_user_id }}"
+microk8s_features:
+  - ha-cluster
+  - dns
+  - ingress
+  - rbac
+  - registry
+  - storage

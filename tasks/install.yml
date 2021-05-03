@@ -1,0 +1,67 @@
+---
+# tasks file for microk8s
+- name: install
+  community.general.snap:
+    channel: "{{ microk8s_snap_channel }}"
+    classic: yes
+    name: microk8s
+    state: present
+
+- name: group membership
+  ansible.builtin.user:
+    append: yes
+    groups: microk8s
+    name: "{{ item }}"
+  with_items:
+    - "{{ ansible_user_id }}"
+    - "{{ microk8s_group_members }}"
+
+- name: KUBECONFIG kubectl setup
+  ansible.builtin.copy:
+    content: |
+      DIR="${HOME}/.kube"
+      if which kubectl &>/dev/null; then
+        [ -d "${DIR}" ] || mkdir -p "${DIR}"
+        if ! [ -f "${DIR}/microk8s.config" ]; then
+          if which microk8s &>/dev/null; then
+            umask 0077
+            microk8s config | sed 's/\(user\|name\): admin/\1: microk8s-admin/' > "${DIR}/microk8s.config"
+          fi
+        fi
+        KUBECONFIG="$(find $DIR \( -name 'config' -o -name '*.config' \) \( -type f -o -type l \) -print0 | tr '\0' ':')"
+        KUBECONFIG="${KUBECONFIG%:}"
+        export KUBECONFIG
+      fi
+    dest: /etc/profile.d/KUBECONFIG.sh
+
+- name: create ansible local facts directory
+  ansible.builtin.file:
+    path: /etc/ansible/facts.d
+    state: directory
+
+- name: install local facts script
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env python3
+      import json
+      import subprocess
+      import yaml
+      try:
+          microk8sStatus = subprocess.run(["microk8s","status","--format yaml","--wait-ready","--timeout 60"], capture_output=True, timeout=10, check=True)
+          print(json.dumps(yaml.load(microk8sStatus.stdout, Loader=yaml.FullLoader)))
+      except:
+          print("{}")
+    dest: /etc/ansible/facts.d/microk8s.fact
+    mode: 0755
+  register: microk8s_facts
+
+- name: wait for microk8s to start
+  ansible.builtin.shell:
+    cmd: microk8s status --format yaml --wait-ready --timeout 60
+  changed_when: false
+  register: microk8s_status
+
+- name: reload ansible local facts
+  ansible.builtin.setup:
+    filter: ansible_local
+  when: microk8s_facts.changed
