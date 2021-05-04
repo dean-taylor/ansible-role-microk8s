@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import yaml
+import re
+
+try:
+    microk8sStatus = subprocess.run(["/snap/bin/microk8s","status","--format yaml","--timeout 60"], capture_output=True, timeout=10, check=True)
+
+    status = b''
+    for line in microk8sStatus.stdout.split(b'\n'):
+        if re.search(b'message:',line):
+            continue
+        status += line +b'\n'
+
+    print(json.dumps(yaml.load(status, Loader=yaml.FullLoader)))
+
+except:
+    print("{}")

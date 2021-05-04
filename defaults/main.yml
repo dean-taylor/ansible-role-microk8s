@@ -10,3 +10,5 @@ microk8s_features:
   - rbac
   - registry
   - storage
+microk8s_ipv4address: "{{ ansible_default_ipv4.address }}"
+microk8s_join_address: "{{ hostvars[ groups['microk8s'] | first ]['ansible_enp0s8']['ipv4']['address'] }}"

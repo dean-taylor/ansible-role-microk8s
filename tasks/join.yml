@@ -2,5 +2,10 @@
 - name: get microk8s join string
   ansible.builtin.shell:
     cmd: microk8s add-node
+    #cmd: microk8s add-node | sed -n "s/^.*\(microk8s join {{ microk8s_join_address }}:.*\)$/\1/p"
   delegate_to: "{{ groups['microk8s'] | first }}"
   register: microk8s_add_node
+
+- name: join host to cluster
+  ansible.builtin.command:
+    cmd: "{{ microk8s_add_node.stdout | regex_search('microk8s join ' + microk8s_join_address + ':.*$' | string) }}"

@@ -41,18 +41,9 @@
 
 - name: install local facts script
   ansible.builtin.copy:
-    content: |
-      #!/usr/bin/env python3
-      import json
-      import subprocess
-      import yaml
-      try:
-          microk8sStatus = subprocess.run(["microk8s","status","--format yaml","--wait-ready","--timeout 60"], capture_output=True, timeout=10, check=True)
-          print(json.dumps(yaml.load(microk8sStatus.stdout, Loader=yaml.FullLoader)))
-      except:
-          print("{}")
     dest: /etc/ansible/facts.d/microk8s.fact
     mode: 0755
+    src: files/microk8s.fact
   register: microk8s_facts
 
 - name: wait for microk8s to start
