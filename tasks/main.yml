@@ -7,10 +7,14 @@
   ansible.builtin.include_tasks: config.yml
   when:
     - inventory_hostname == groups['microk8s'] | first
+    - ansible_local.microk8s is defined
+    - ansible_local.microk8s.addons is defined
 
 - name: join cluster
   ansible.builtin.include_tasks: join.yml
   when:
     - inventory_hostname != groups['microk8s'] | first
-    - ansible_local.microk8s
-    - hostvar['ansible_local']['microk8s']['high-availability'] is not defined
+    - ansible_local.microk8s is defined
+    - ansible_local['microk8s']['high-availability'] is defined
+    - ansible_local['microk8s']['high-availability']['enabled'] == true
+    - ansible_local['microk8s']['high-availability']['nodes'] | length <= 1

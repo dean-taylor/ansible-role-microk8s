@@ -4,5 +4,5 @@
   with_items:
     - "{{ microk8s_features }}"
   when:
-    - ansible_local.microk8s.addons is defined
     - (ansible_local.microk8s.addons | selectattr('name','contains', item ) | first).status == "disabled"
+  register: microk8s_enable
