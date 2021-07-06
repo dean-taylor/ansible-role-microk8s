@@ -11,4 +11,6 @@ microk8s_features:
   - registry
   - storage
 microk8s_ipv4address: "{{ ansible_default_ipv4.address }}"
-microk8s_join_address: "{{ hostvars[ groups['microk8s'] | first ]['ansible_enp0s8']['ipv4']['address'] }}"
+microk8s_cluster_group: "microk8s"
+microk8s_join_address: "{{ hostvars[ groups[microk8s_cluster_group] | first ]['ansible_ens3']['ipv4']['address'] }}"
+microk8s_cluster_master: "{{ groups[microk8s_cluster_group] | first }}"

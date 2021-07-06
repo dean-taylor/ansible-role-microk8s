@@ -3,15 +3,17 @@
   ansible.builtin.shell:
     cmd: microk8s add-node
   changed_when: false
-  delegate_to: "{{ groups['microk8s'] | first }}"
+  delegate_to: "{{ microk8s_cluster_master }}"
   register: microk8s_add_node
 
 - ansible.builtin.debug:
     var: microk8s_add_node.stdout
     verbosity: 1
+  when: 0 > 1
 - ansible.builtin.debug:
     msg: "{{ microk8s_add_node.stdout | regex_search('microk8s join ' + microk8s_join_address + ':.*$', multiline=True) | string }}"
     verbosity: 1
+  when: 0 > 1
 
 - name: join host to cluster
   ansible.builtin.command:
