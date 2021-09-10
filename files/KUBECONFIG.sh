@@ -14,7 +14,7 @@ if which kubectl &>/dev/null; then
   fi
 
   # setup kubectl
-  KUBECONFIG="$(find $DIR \( -name 'config' -o -name '*.config' \) \( -type f -o -type l \) -print0 | tr '\0' ':')"
-  KUBECONFIG="${KUBECONFIG%:}"
+  KUBECONFIG="$(find $DIR -name '*.config' \( -type f -o -type l \) -print0 | tr '\0' ':')"
+  [[ -f ${DIR}/config ]] && KUBECONFIG="${DIR}/config:${KUBECONFIG%:}" || KUBECONFIG="${KUBECONFIG%:}"
   export KUBECONFIG
 fi
