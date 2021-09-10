@@ -14,7 +14,6 @@
     groups: microk8s
     name: "{{ item }}"
   with_items:
-    - "{{ ansible_user_id }}"
     - "{{ microk8s_group_members }}"
 
 - name: KUBECONFIG kubectl setup
