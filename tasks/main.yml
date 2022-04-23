@@ -1,24 +1,55 @@
 ---
 # tasks file for microk8s
-- name: install
-  ansible.builtin.include_tasks: install.yml
+#
+- name: microk8s info
+  ansible.builtin.shell:
+    cmd: /usr/bin/snap info microk8s
+  changed_when: false
+  register: microk8s_info
 
-- name: configure
-  ansible.builtin.include_tasks: config.yml
-  when:
-    - groups[microk8s_cluster_group] is defined
-    - inventory_hostname in groups[microk8s_cluster_group]
-    - inventory_hostname == groups[microk8s_cluster_group] | first
-    - ansible_local.microk8s is defined
-    - ansible_local.microk8s.addons is defined
+- name: set facts
+  ansible.builtin.set_fact:
+    channel: "{{ (microk8s_info.stdout |from_yaml).tracking |default('') }}"
+    install: "{{ (((microk8s_info.stdout |from_yaml).installed is defined)
+             and (microk8s_snap_channel |length >0)
+             and ((microk8s_info.stdout |from_yaml).tracking != microk8s_snap_channel))
+             |ternary('upgrade','install') }}"
+    primary_node: "{{ ansible_play_hosts |sort |first }}"
+    is_worker: false
+
+- name: set fact join_address
+  ansible.builtin.set_fact:
+    join_address: "{{ hostvars[primary_node]['ansible_default_ipv4']['address'] }}"
+
+- name: install or upgrade
+  ansible.builtin.include_tasks: "{{ install }}.yml"
+
+# DNS.5 = kubernetes.default.svc.cluster.local
+# IP.2 = 10.152.183.1
+- name: Cert DNS
+  ansible.builtin.blockinfile:
+    block: |
+      {% for csr in microk8s_csr_extra %}
+      {{ csr }}
+      {% endfor %}
+    insertafter: "^#MOREIPS"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - microk8s role"
+    path: /var/snap/microk8s/current/certs/csr.conf.template
+    state: present
+  notify:
+    - csr refresh
 
 - name: join cluster
   ansible.builtin.include_tasks: join.yml
   when:
-    - groups[microk8s_cluster_group] is defined
-    - inventory_hostname in groups[microk8s_cluster_group]
-    - inventory_hostname != groups[microk8s_cluster_group] | first
+    - inventory_hostname != primary_node
     - ansible_local.microk8s is defined
     - ansible_local['microk8s']['high-availability'] is defined
     - ansible_local['microk8s']['high-availability']['enabled'] == true
     - ansible_local['microk8s']['high-availability']['nodes'] | length <= 1
+
+- name: configure
+  ansible.builtin.include_tasks: config.yml
+  when:
+    - ansible_local.microk8s is defined
+    - ansible_local.microk8s.addons is defined

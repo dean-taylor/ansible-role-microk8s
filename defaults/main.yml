@@ -1,16 +1,14 @@
 ---
 # defaults file for microk8s
-microk8s_snap_channel: 1.19/stable
+microk8s_snap_channel: ""
 microk8s_group_members:
-  - "{{ ansible_user_id }}"
-microk8s_features:
-  - ha-cluster
-  - dns
-  - ingress
-  - rbac
-  - registry
-  - storage
+  - "{{ ansible_user }}"
+microk8s_features: []
+microk8s_csr_extra: []
+
 microk8s_ipv4address: "{{ ansible_default_ipv4.address }}"
 microk8s_cluster_group: "microk8s"
+microk8s_ha_group: "{{ microk8s_cluster_group |default ansible_play_hosts }}"
+microk8s_worker_group: ""
 microk8s_join_address: "{{ hostvars[ groups[microk8s_cluster_group] | first ]['ansible_ens3']['ipv4']['address'] }}"
 microk8s_cluster_master: "{{ groups[microk8s_cluster_group] | first }}"

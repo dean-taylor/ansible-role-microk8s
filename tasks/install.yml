@@ -1,5 +1,6 @@
 ---
-# tasks file for microk8s
+# roles/microk8s/tasks/install.yml
+#
 - name: install
   community.general.snap:
     channel: "{{ microk8s_snap_channel }}"
@@ -42,4 +43,16 @@
 - name: reload ansible local facts
   ansible.builtin.setup:
     filter: ansible_local
-  when: microk8s_facts.changed
+    #when: microk8s_facts.changed
+
+- name: enable ha
+  ansible.builtin.command:
+    cmd: /snap/bin/microk8s enable ha-cluster
+  register: microk8s_enable_ha
+  when:
+    - (ansible_local.microk8s.addons |selectattr('name','contains','ha-cluster') |first).status == "disabled"
+
+- name: reload ansible local facts
+  ansible.builtin.setup:
+    filter: ansible_local
+  when: microk8s_enable_ha.changed
