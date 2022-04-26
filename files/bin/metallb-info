@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#
+CLOUD='cvl-trial'
+NETWORK='k8s'
+OPENSTACK="openstack --os-cloud $CLOUD"
+
+IP="${1:-10.174.1.61}"
+
+floating_ips="$($OPENSTACK floating ip list -f json --sort-descending --tags metallb --long)"
+
+echo "${floating_ips}" \
+  |jq -r ".[] |select(.\"Fixed IP Address\"==\"$IP\") | .\"Floating IP Address\""
+
+echo "${floating_ips}" \
+  |jq -r ".[] |select(.\"Fixed IP Address\"==\"$IP\") | .\"Floating IP Address\""

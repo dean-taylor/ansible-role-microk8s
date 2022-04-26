@@ -6,6 +6,11 @@ microk8s_group_members:
 microk8s_features: []
 microk8s_csr_extra: []
 
+# MetalLB settings (optional)
+# Only used if microk8s_features contains metallb
+# Will override microk8s_features metallb ip ranges if set
+microk8s_metallb_ip_ranges: []
+
 microk8s_ipv4address: "{{ ansible_default_ipv4.address }}"
 microk8s_cluster_group: "microk8s"
 microk8s_ha_group: "{{ microk8s_cluster_group |default ansible_play_hosts }}"

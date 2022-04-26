@@ -1,6 +1,13 @@
 - name: microk8s enable features
-  ansible.builtin.command:
-    cmd: /snap/bin/microk8s enable {{ item }}
+  ansible.builtin.shell:
+    cmd: |
+      FEATURE="{{item}}"
+      if [[ $FEATURE == metallb* ]] && [[ ! -z "{{microk8s_metallb_ip_ranges |default('')}}" ]]; then
+      /snap/bin/microk8s enable metallb:{{microk8s_metallb_ip_ranges}}
+      else
+      /snap/bin/microk8s enable $FEATURE
+      fi
+    shell: /bin/bash
   delegate_to: "{{ (ansible_local['microk8s']['high-availability']['nodes'] |length >1)
                    |ternary(primary_node,'') }}"
   run_once: "{{ ansible_local['microk8s']['high-availability']['nodes'] |length >1 }}"
