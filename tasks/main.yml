@@ -1,19 +1,21 @@
 ---
-# tasks file for microk8s
+# roles/microk8s/tasks/main.yml
 #
-- name: microk8s info
+- name: microk8s snap info
   ansible.builtin.shell:
     cmd: /usr/bin/snap info microk8s
   changed_when: false
-  register: microk8s_info
+  register: microk8s_snap
 
 - name: set facts
   ansible.builtin.set_fact:
-    channel: "{{ (microk8s_info.stdout |from_yaml).tracking |default('') }}"
-    install: "{{ (((microk8s_info.stdout |from_yaml).installed is defined)
+    channel: "{{ (microk8s_snap.stdout |from_yaml).tracking |default('') }}"
+    helm: "/snap/bin/microk8s.helm3"
+    install: "{{ (((microk8s_snap.stdout |from_yaml).installed is defined)
              and (microk8s_snap_channel |length >0)
-             and ((microk8s_info.stdout |from_yaml).tracking != microk8s_snap_channel))
+             and ((microk8s_snap.stdout |from_yaml).tracking != microk8s_snap_channel))
              |ternary('upgrade','install') }}"
+    kubectl: "/snap/bin/microk8s.kubectl"
     primary_node: "{{ ansible_play_hosts |sort |first }}"
     is_worker: false
 
@@ -26,7 +28,7 @@
 
 # DNS.5 = kubernetes.default.svc.cluster.local
 # IP.2 = 10.152.183.1
-- name: Cert DNS
+- name: CSR DNS
   ansible.builtin.blockinfile:
     block: |
       {% for csr in microk8s_csr_extra %}
@@ -48,6 +50,22 @@
     - ansible_local['microk8s']['high-availability']['enabled'] == true
     - ansible_local['microk8s']['high-availability']['nodes'] | length <= 1
 
+- name: set fact delegate_to
+  ansible.builtin.set_fact:
+    delegate_to: "{{ (ansible_local['microk8s']['high-availability']['nodes'] |length >1)
+                     |ternary(primary_node,'') }}"
+    run_once: "{{ ansible_local['microk8s']['high-availability']['nodes'] |length >1 }}"
+
+- name: cloud integration
+  ansible.builtin.include_tasks: "configure-{{microk8s_cloud_service}}.yml"
+  when:
+    - microk8s_cloud_service == "openstack"
+
+- name: kadalu integration - glusterfs
+  ansible.builtin.include_tasks: configure-kadalu.yml
+  when:
+    - microk8s_kadalu_enabled
+
 - name: microk8s enable features
   ansible.builtin.shell:
     cmd: |
@@ -57,13 +75,63 @@
       else
       /snap/bin/microk8s enable $FEATURE
       fi
-    shell: /bin/bash
-  delegate_to: "{{ (ansible_local['microk8s']['high-availability']['nodes'] |length >1)
-                   |ternary(primary_node,'') }}"
-  run_once: "{{ ansible_local['microk8s']['high-availability']['nodes'] |length >1 }}"
+    executable: /bin/bash
+  delegate_to: "{{delegate_to}}"
+  run_once: "{{run_once}}" 
   with_items:
     - "{{ microk8s_features }}"
+    - helm3
   when:
     - ansible_local.microk8s is defined
     - ansible_local.microk8s.addons is defined
     - (ansible_local.microk8s.addons |selectattr('name','contains', item.split(':')[0] ) |first).status == "disabled"
+  notify:
+    - reload facts
+
+- name: alias to microk8s commands such as kubectl
+  ansible.builtin.copy:
+    content: |
+      alias kubectl='/snap/bin/microk8s.kubectl'
+      alias helm='/snap/bin/microk8s.helm3'
+    dest: /etc/profile.d/microk8s-alias.sh
+    mode: 0644
+  when:
+    - microk8s_alias_enabled
+
+- name: configure cert-manager
+  ansible.builtin.include_tasks: configure-cert-manager.yml
+  when:
+    - microk8s_cert_manager_enabled
+
+- name: configure load balancer port for nginx ingress
+  ansible.builtin.shell:
+    cmd: |
+      cat <<EOT |{{kubectl}} apply -f -
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ingress
+        namespace: ingress
+      spec:
+        selector:
+          name: nginx-ingress-microk8s
+        type: LoadBalancer
+        #loadBalancerIP: a.b.c.d
+        ports:
+          - name: http
+            protocol: TCP
+            port: 80
+            targetPort: 80
+          - name: https
+            protocol: TCP
+            port: 443
+            targetPort: 443
+      EOT
+    executable: /bin/bash
+  delegate_to: "{{delegate_to}}"
+  run_once: "{{run_once}}"
+  register: kubectl_apply
+  changed_when: kubectl_apply.stdout_lines |reject('search','unchanged') |list |length >0
+  when:
+    - microk8s_features is search("metallb")
+    - microk8s_features is search("ingress")

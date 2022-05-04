@@ -4,3 +4,8 @@
 - name: csr refresh
   ansible.builtin.command:
     cmd: /usr/bin/snap set microk8s csr-refresh=true
+
+- name: reload facts
+  ansible.builtin.setup:
+    filter:
+      - ansible_local

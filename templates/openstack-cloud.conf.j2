@@ -1,0 +1,32 @@
+{% set cloud_conf = (microk8s_openstack_cloud_conf |combine(microk8s_openstack_cloud_conf_default)) %}
+[Global]
+auth-url={{cloud_conf.auth_url}}
+ca-file={{cloud_conf.ca_file}}
+region={{cloud_conf.region}}
+application-credential-id={{cloud_conf.application_credential_id}}
+application-credential-name={{cloud_conf.application_credential_name}}
+application-credential-secret={{cloud_conf.application_credential_secret}}
+[BlockStorage]
+node-volume-attach-limit=256
+rescan-on-resize=false
+ignore-volume-az=false
+[Networking]
+ipv6-support-disabled={{cloud_conf.ipv6_support_disabled |ternary('true','false')}}
+{% if cloud_conf.public_network_name is string %}
+public-network-name={{cloud_conf.public_network_name}}
+{% else %}
+{% for public_network_name in cloud_conf.public_network_name %}
+public-network-name={{public_network_name}}
+{% endfor %}
+{% endif %}
+{% if cloud_conf.internal_network_name is string %}
+internal-network-name={{cloud_conf.internal_network_name}}
+{% else %}
+{% for internal_network_name in cloud_conf.internal_network_name %}
+internal-network-name={{internal_network_name}}
+{% endfor %}
+{% endif %}
+[LoadBalancer]
+enabled={{cloud_conf.loadbalancer_enabled |ternary('true','false')}}
+[Metadata]
+search-order={{cloud_conf.metadata_search_order}}

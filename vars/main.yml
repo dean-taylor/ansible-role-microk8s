@@ -1,2 +1,9 @@
 ---
 # vars file for microk8s
+#
+microk8s_openstack_cloud_conf_default:
+  ca_file: /etc/cacert/ca-bundle.crt
+  region: RegionOne
+  ipv6_support_disabled: true
+  loadbalancer_enabled: false
+  metadata_search_order: metadataService,configDrive

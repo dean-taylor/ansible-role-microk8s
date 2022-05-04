@@ -1,0 +1,83 @@
+---
+# roles/microk8s/tasks/configure-openstack.yml
+# https://github.com/kubernetes/cloud-provider-openstack/tree/master/charts/cinder-csi-plugin
+# https://github.com/kubernetes/cloud-provider-openstack/blob/master/docs/cinder-csi-plugin/using-cinder-csi-plugin.md
+#
+- name: openstack cloud provider
+  become: false
+  run_once: "{{run_once}}"
+  block:
+    - name: openstack cloud provider settings
+      ansible.builtin.shell:
+        cmd: |
+          cat <<EOT |{{kubectl}} apply -f -
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: cloud-provider-openstack
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: cloud-config
+            namespace: cloud-provider-openstack
+          stringData:
+            cloud-config: |
+              {{lookup('template','openstack-cloud.conf.j2') |indent(4)}}
+          ---
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: cacert
+            namespace: cloud-provider-openstack
+          data:
+            ca-bundle.crt: |
+              {{microk8s_openstack_cloud_conf.ca_bundle_crt |indent(4)}}
+          EOT
+        executable: /bin/bash
+      register: kubectl_apply_openstack
+      delegate_to: "{{delegate_to}}"
+      changed_when: kubectl_apply_openstack.stdout_lines |reject('search','unchanged') |list |length >0
+
+    - name: openstack cloud provider charts
+      kubernetes.core.helm_repository:
+        binary_path: "{{helm}}"
+        repo_name: cpo
+        repo_state: present
+        repo_url: https://kubernetes.github.io/cloud-provider-openstack
+      delegate_to: "{{delegate_to}}"
+
+    - name: openstack cinder csi
+      kubernetes.core.helm:
+        binary_path: "{{helm}}"
+        chart_ref: cpo/openstack-cinder-csi
+        #chart_version: ""
+        create_namespace: true
+        release_name: cinder-csi
+        release_namespace: cloud-provider-openstack
+        release_state: present
+        release_values:
+          csi:
+            plugin:
+              volumes:
+                - name: cacert
+                  configMap:
+                    name: cacert
+          secret:
+            enabled: true
+            name: cloud-config
+          storageClass:
+            custom: |-
+              ---
+              apiVersion: storage.k8s.io/v1
+              kind: StorageClass
+              metadata:
+                name: csi-cinder-sc-retain-wffc
+              provisioner: cinder.csi.openstack.org
+              reclaimPolicy: Retain
+              volumeBindingMode: WaitForFirstConsumer
+              allowVolumeExpansion: true
+      delegate_to: "{{delegate_to}}"
+      when:
+        - microk8s_openstack_cinder_enabled

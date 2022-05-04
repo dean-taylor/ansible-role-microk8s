@@ -1,0 +1,68 @@
+---
+# roles/microk8s/tasks/configure-kadalu.yml
+#
+- ansible.builtin.debug:
+    var: microk8s_kadalu_gluster_hosts
+
+- name: kadalu configuration
+  become: false
+  run_once: true
+  block:
+    - name: kadalu external auth
+      ansible.builtin.shell:
+        cmd: |
+          cat <<EOT |{{kubectl}} apply -f -
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: kadalu
+          ---
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: glusterquota-ssh-secret
+            namespace: kadalu
+          stringData:
+            glusterquota-ssh-username: kadalu
+            ssh-privatekey: |
+              {{microk8s_kadalu_ssh_priv |indent(4)}}
+          EOT
+        executable: /bin/bash
+      register: kubectl_apply_kadalu_auth
+      delegate_to: "{{delegate_to}}"
+      changed_when: kubectl_apply_kadalu_auth.stdout_lines |reject('search','unchanged') |list |length >0
+
+    - name: kadalu install --type microk8s
+      ansible.builtin.shell:
+        cmd: >
+          {{kubectl}} apply -f
+          https://github.com/kadalu/kadalu/releases/download/0.8.14/{{item}}.yaml
+      register: kubectl_apply_kadalu
+      changed_when: kubectl_apply_kadalu.stdout_lines |reject('search','unchanged') |list |length >0
+      delegate_to: "{{delegate_to}}"
+      with_items:
+        - kadalu-operator-microk8s
+        - csi-nodeplugin-microk8s
+
+    - name: kadalu storage class
+      ansible.builtin.shell:
+        cmd: |
+          cat <<EOT |{{kubectl}} apply -f -
+          apiVersion: kadalu-operator.storage/v1alpha1
+          kind: KadaluStorage
+          metadata:
+            name: external-delete
+          spec:
+            type: External
+            storage: []
+            details:
+              gluster_hosts: {{microk8s_kadalu_gluster_hosts |list}}
+              gluster_volname: kadalu
+              gluster_options: ""
+          EOT
+        executable: /bin/bash
+      register: kubectl_apply_kadalu_sc
+      delegate_to: "{{delegate_to}}"
+      changed_when: kubectl_apply_kadalu_sc.stdout_lines |reject('search','unchanged') |list |length >0
+

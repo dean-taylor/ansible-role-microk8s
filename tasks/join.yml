@@ -14,7 +14,7 @@
              |string }}
           {{ is_worker |ternary(' --worker','') }}"
 
-- name: reload ansible facts
+- name: reload facts
   ansible.builtin.setup:
     filter: ansible_local
 
