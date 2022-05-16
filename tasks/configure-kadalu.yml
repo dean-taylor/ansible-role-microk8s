@@ -66,3 +66,5 @@
       delegate_to: "{{delegate_to}}"
       changed_when: kubectl_apply_kadalu_sc.stdout_lines |reject('search','unchanged') |list |length >0
 
+    - ansible.builtin.debug:
+        var: kubectl_apply_kadalu_sc
