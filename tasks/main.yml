@@ -57,7 +57,7 @@
     run_once: "{{ ansible_local['microk8s']['high-availability']['nodes'] |length >1 }}"
 
 - name: cloud integration
-  ansible.builtin.include_tasks: "configure-{{microk8s_cloud_service}}.yml"
+  ansible.builtin.include_tasks: "configure-{{microk8s_cloud_service|lower}}.yml"
   when:
     - microk8s_cloud_service == "openstack"
 

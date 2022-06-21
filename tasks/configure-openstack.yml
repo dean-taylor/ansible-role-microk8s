@@ -81,3 +81,144 @@
       delegate_to: "{{delegate_to}}"
       when:
         - microk8s_openstack_cinder_enabled
+
+
+# MetalLB OpenStack configuration to allow layer 2 VRRP
+# Enable local firewall on each microk8s host
+# Disable OpenStack port security on each microk8s host
+#
+- name: MetalLB setup for OpenStack
+  when:
+    - microk8s_features |select("match","^metallb") |list |length >0
+  block:
+    - name: ufw allow OpenSSH
+      community.general.ufw:
+        name: OpenSSH
+        rule: allow
+
+    - name: ufw allow services
+      community.general.ufw:
+        direction: "{{ item.direction |default('in') }}"
+        from_ip: "{{ item.from_ip |default('any') }}"
+        proto: "{{ item.proto |default('tcp') }}"
+        rule: "{{ item.rule |default('allow') }}"
+        to_ip: "{{ item.to_ip |default('any') }}"
+        to_port: "{{ item.to_port |default('any') }}"
+      with_items:
+        - "{{firewall_rules|default([])}}"
+
+    - name: ufw whitelist k8s nodes
+      community.general.ufw:
+        comment: k8s nodes whitelist
+        from_ip: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+        insert: "{{ host_idx +1 }}"
+        rule: allow
+      loop: "{{ ansible_play_hosts }}"
+      loop_control:
+        index_var: host_idx
+    - name: ufw DEFAULT_FORWARD_POLICY
+      ansible.builtin.lineinfile:
+        line: DEFAULT_FORWARD_POLICY="ACCEPT"
+        path: /etc/default/ufw
+        regexp: "^DEFAULT_FORWARD_POLICY="
+        state: present
+      notify:
+        - reload ufw
+
+    # sudo ufw allow in on vxlan.calico && sudo ufw allow out on vxlan.calico
+    # sudo ufw allow in on cali+ && sudo ufw allow out on cali+
+    - name: ufw Calico rules
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        interface: "{{ item.interface }}"
+        rule: allow
+      with_items:
+        - { direction: in, interface: "vxlan.calico" }
+        - { direction: out, interface: "vxlan.calico" }
+        - { direction: in, interface: "cali+" }
+        - { direction: out, interface: "cali+" }
+
+    - name: firewall enable
+      community.general.ufw:
+        state: enabled
+
+    - name: MetalLB disable openstack port security
+      become: false
+      ansible.builtin.shell:
+        cmd: |
+          OPENSTACK="openstack --os-cloud {{cloud}}"
+          [[ $($OPENSTACK port show -f value -c port_security_enabled {{inventory_hostname}} 2>/dev/null) == 'False' ]] && exit 0
+          $OPENSTACK port set \
+          --no-security-group \
+          --no-allowed-address \
+          --disable-port-security \
+          {{ inventory_hostname }} && echo 'CHANGED'
+        executable: /bin/bash
+      register: os_port_sec
+      delegate_to: localhost
+      changed_when:
+        - os_port_sec.stdout == "CHANGED"
+
+    - name: OpenStack MetalLB enabled
+      become: false
+      run_once: true
+      block:
+        - name: MetalLB ports
+          local_action:
+            module: openstack.cloud.port
+            cloud: "{{cloud}}"
+            name: metallb-{{item}}.{{ansible_domain}}
+            network: "{{os_stack_name}}"
+            no_security_groups: true
+            port_security_enabled: false
+            state: present
+          loop: "{{ query('sequence','start=0 end=4') }}"
+
+        - name: MetalLB port tags
+          ansible.builtin.shell:
+            cmd: |
+              PORT="metallb-{{item}}.{{ansible_domain}}"
+              NETWORK="{{os_stack_name}}"
+              OPENSTACK="openstack --os-cloud {{cloud}}"
+              [[ $($OPENSTACK port list -f json --network $NETWORK --name $PORT --tags metallb) == '[]' ]] || exit 0
+              $OPENSTACK port set --tag metallb $PORT && echo "CHANGED"
+            executable: /bin/bash
+          register: port_tag
+          loop: "{{ query('sequence','start=0 end=4') }}"
+          changed_when:
+            - port_tag.stdout == "CHANGED"
+          delegate_to: localhost
+
+        - name: MetalLB floating IP
+          ansible.builtin.shell:
+            cmd: |
+              OPENSTACK="openstack --os-cloud {{cloud}}"
+              [[ $($OPENSTACK floating ip list -f json --port metallb-{{item}}.{{ansible_domain}}) == '[]' ]] || exit 0
+              $OPENSTACK floating ip create \
+              --port metallb-{{item}}.{{ansible_domain}} \
+              --description "metallb-{{item}}.{{ansible_domain}}" \
+              --tag metallb \
+              {{network_external |quote}} && echo "CHANGED"
+            executable: /bin/bash
+          register: floating_ip
+          changed_when:
+            - floating_ip.stdout == "CHANGED"
+          loop: "{{ query('sequence','start=0 end=4') }}"
+          delegate_to: localhost
+          run_once: true
+
+        - name: MetalLB floating ip list
+          local_action:
+            module: ansible.builtin.shell
+            cmd: |
+              OPENSTACK="openstack --os-cloud={{cloud}}"
+              $OPENSTACK floating ip list -f json --tags metallb
+          register: metallb_floating_ips
+          changed_when: false
+
+    - name: MetalLB IP ranges?
+      ansible.builtin.set_fact:
+        microk8s_metallb_ip_ranges: "{{ (metallb_floating_ips.stdout |from_json) |
+                                        map(attribute='Fixed IP Address') |
+                                        map('regex_replace','^(.*)$','\\1/32') |list }}"
+
