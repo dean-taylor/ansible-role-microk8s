@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 DIR="${HOME}/.kube"
 
 # if kubectl is in PATH / installed
@@ -6,7 +7,7 @@ if which kubectl &>/dev/null; then
 
   # Add generic config file
   if [[ ! -f ${DIR}/config ]]; then
-    (umask 0077 && cat <<EOT >${DIR}/config
+    (umask 0077 && cat <<EOT >"${DIR}/config"
 apiVersion: v1
 clusters: []
 contexts: []

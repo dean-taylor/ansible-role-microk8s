@@ -221,4 +221,3 @@
         microk8s_metallb_ip_ranges: "{{ (metallb_floating_ips.stdout |from_json) |
                                         map(attribute='Fixed IP Address') |
                                         map('regex_replace','^(.*)$','\\1/32') |list }}"
-
